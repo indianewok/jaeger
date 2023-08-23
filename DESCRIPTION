@@ -1,0 +1,38 @@
+Package: bajranger
+Type: Package
+Title: Demultiplexing, Fixing, & Otherwise Futzing With Gnarly Sequencing Data
+Version: 0.0.1
+Author: CMV
+Maintainer: CMV <chinmay.m.vaidya.GR@dartmouth.edu>
+Description: I built a bunch of tools to basically make demultiplexing your data and tried to put it all in one place. Think of this package as the diligent monkey's Shakespeare.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    bit64,
+    data.table,
+    DescTools,
+    dplyr,
+    edlibR,
+    glue,
+    magrittr,
+    pafr,
+    parallel,
+    pbapply,
+    pbmcapply,
+    processx,
+    progress,
+    pryr,
+    purrr,
+    R.utils,
+    Rcpp,
+    stats,
+    stringdist,
+    stringi,
+    stringr,
+    tgutil,
+    tibble,
+    tidytable,
+    tools,
+    trqwe
+RoxygenNote: 7.2.2
