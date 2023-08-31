@@ -15,6 +15,6 @@ distance_error_batching<-function(df, null_distances){
      & !dup_finder(forw_primer_pos), batch := "parallel_f_concatenates"]
   df[batch == "reverses" & gen_length(rc_forw_primer_pos) > 2
      & !dup_finder(rc_forw_primer_pos), batch := "parallel_r_concatenates"]
-  df<-df %>% unite(., col = "error_code", c(grep(pattern = "_dist", x = colnames(df), value = TRUE)), remove = TRUE)
+  #df<-df %>% unite(., col = "error_code", c(grep(pattern = "_dist", x = colnames(df), value = TRUE)), remove = TRUE)
   return(df)
 }

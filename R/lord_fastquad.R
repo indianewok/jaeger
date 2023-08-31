@@ -1,3 +1,4 @@
+#' @export
 lord_fastquad<-function(df,fn,type,append){
   if(type == "fq"){
     fq_list<-df %>%

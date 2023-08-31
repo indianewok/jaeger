@@ -5,12 +5,12 @@ location_extraction<-function(alignments, adapters){
     if(adapter_name == "poly_a"||adapter_name =="poly_t"){
       location_frame[[adapter_name]]<-alignments[[adapter_name]] %>%
         lapply(function(x){
-          x[["locations"]] %>% unlist(.) %>% as.integer(.) %>% unique(.) %>% {.+1}
+          x[["locations"]] %>% unlist(.) %>% as.integer(.) %>% {kit::funique(.,fromLast=TRUE)+1}
         })
     }else{
       location_frame[[adapter_name]]<-alignments[[adapter_name]] %>%
         lapply(function(x){
-          x[["locations"]] %>% unlist(.) %>% unique(.) %>% {.+1}
+          x[["locations"]] %>% unlist(.) %>% {kit::funique(.,fromLast=TRUE)+1}
         })
     }
   }

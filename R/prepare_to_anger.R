@@ -1,3 +1,4 @@
+#' @export
 prepare_to_anger<-function(kit_prime, whitelist_path,...){
   adapt_metrics<-list()
   if(kit_prime == "three"){

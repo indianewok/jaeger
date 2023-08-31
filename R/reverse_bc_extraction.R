@@ -1,0 +1,6 @@
+reverse_bc_extraction<-function(sequence, position_list, barcode_length){
+  stop<-sapply(position_list, FUN = function(x){pluck(x,1)})-1
+  start<-stop-barcode_length+1
+  barcode<-substr(sequence, start = start, stop = stop) %>% revcomp(.)
+  return(barcode)
+}

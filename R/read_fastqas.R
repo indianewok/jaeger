@@ -1,3 +1,4 @@
+#'@export
 read_fastqas<-function(fn,type, ...){
   ext<-tools::file_ext(fn)
   if (ext == "gz"){

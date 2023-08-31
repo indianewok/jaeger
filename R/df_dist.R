@@ -1,3 +1,4 @@
+#' @export
 df_dist<-function(adapters, df, cores){
   alignments<-as.data.table(matrix(NA, nrow = nrow(df), ncol = length(adapters)))
   setnames(alignments, names(adapters))

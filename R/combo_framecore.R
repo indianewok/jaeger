@@ -1,3 +1,4 @@
+#' @export
 combo_framecore<-function(alignments, adapters, cores = NULL){
   if(is.null(cores)||cores == 1){
     combo_frame<-metric_framemode(mode = "both", alignments = alignments, adapters = adapters)

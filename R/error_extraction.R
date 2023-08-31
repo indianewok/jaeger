@@ -1,3 +1,4 @@
+#' @export
 error_extraction<-function(alignments, adapters){
   error_frame<-as.data.table(matrix(NA, nrow = nrow(alignments), ncol = length(adapters)))
   setnames(error_frame, names(adapters))

@@ -1,3 +1,4 @@
+#' @export
 adapter_error_calcs<-function(df,adapt_metrics){
   null_distances<-dist_consolidation(df = df,
                                      distances_one = adapt_metrics$forwards_dist,
