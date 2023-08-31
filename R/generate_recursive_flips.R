@@ -1,4 +1,4 @@
-cppFunction('
+Rcpp::cppFunction('
   #include <Rcpp.h>
   #include <bitset>
   #include <set>

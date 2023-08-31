@@ -10,6 +10,7 @@
 #' @importFrom magrittr %>%
 #' @importFrom parallel mclapply
 #' @importFrom parallel mcmapply
+#' @importFrom Rcpp cppFunction
 #' @importFrom stats sd
 #' @importFrom stringi stri_detect_regex
 #' @importFrom stringi stri_locate_all_regex

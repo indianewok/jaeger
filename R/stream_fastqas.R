@@ -5,8 +5,7 @@ stream_fastqas<-function(fn, type, seqkit_path = NULL, start, stop, ...){
   }else{
     seqkit<-Sys.which("seqkit")
     if(nchar(seqkit) == 0){
-      print("Seqkit installation not found!")
-      break
+      return(print("Seqkit installation not found!"))
     }
   }
   ext<-tools::file_ext(fn)
