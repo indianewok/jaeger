@@ -14,6 +14,7 @@ Imports:
     dplyr,
     glue,
     magrittr,
+    pbapply,
     Rcpp,
     stringr,
     tidytable

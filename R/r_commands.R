@@ -228,7 +228,7 @@ bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
   output_path<-path_layout["output_dir","actual_path"]
   print(paste0("The files are coming in from ", input_path, 
     " and the files are going to be written to ", output_path))
-  if(test_mode == TRUE){
+  if(test_mode == TRUE & test_return_stage != "chunked_fastqs"){
     print("Testing that this actually works!")
     if(dir.exists(input_path[[1]])){
       print("Input path is a directory!")
@@ -241,12 +241,12 @@ bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
         }
       })
       print("Now pulling in the first big chunk...")
-      df<-lapply(X=file_chunks[[1]][1:20],FUN = function(X){read_fastqas(fn =X, 
+      df<-lapply(X=file_chunks[[1]][1:20],FUN = function(X){jaeger::read_fastqas(fn =X, 
         type = "fq")}) %>% data.table::rbindlist(.)
     } else {
       if(file.exists(input_path[[1]])){
         print("Input path is a single fastq file!")
-        df<-read_fastqas(fn = input_path, type = "fq", full_id = TRUE)
+        df<-jaeger::read_fastqas(fn = input_path, type = "fq", full_id = TRUE)
       }
     }
     print("Now calculating misalignment distributions with first 100K sequences!")
@@ -301,31 +301,64 @@ bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
     }
   }
   print("Calculating misalignment distributions with first 100K sequences!")
+  if(test_mode == TRUE){
+    if(test_return_stage == "chunked_fastqs"){
+      gz_files<-list.files(path = input_path[[1]], pattern = ".gz", full.names = TRUE)
+      file_chunks<-split(gz_files, ceiling(seq_along(gz_files) / 50))
+      file_chunks<-file_chunks[1:5]
+      lapply(seq_along(file_chunks), function(i){
+        print("Testing to find all file chunks...")
+        if(file.exists(file_chunks[[i]][1])){
+          print(paste0("Chunk ",i," found!"))
+        }
+      })
+    }
+  }
   df<-lapply(X=file_chunks[[1]][1:20],
-    FUN = function(X){read_fastqas(fn =X, type = "fq")}) %>% data.table::rbindlist(.)
+    FUN = function(X){read_fastqas(fn =X, type = "fq")}) %>% 
+    data.table::rbindlist(.)
   null_distance<-bajalign_stats(adapters[-grep("poly", x = names(adapters))], 
     sequences = df$fastq_files[1:100000],
     nthreads= 1) %>% stat_collector(., read_layout, mode = "stats")
   print("Misalignment Thresholds as follows:")
   print(null_distance)
   write.csv(null_distance, file = paste0(output_path[[1]],"/misalignment_distances.csv"))
-  lapply(seq_along(file_chunks), function(i){
+  pbapply::pblapply(seq_along(file_chunks), function(i){
     print(paste0("now on chunk ", i, " of processing!"))
-    df<-lapply(X=file_chunks[[i]],FUN = function(X){bajranger::read_fastqas(fn =X, 
-      type = "fq")}) %>% rbindlist(.)
+    df<-lapply(X=file_chunks[[i]],FUN = function(X){jaeger::read_fastqas(fn =X, 
+      type = "fq")}) %>% data.table::rbindlist(.)
+    df<-df[which(str_length(df$fastq_files) >= 150),]
     sigstrings<-vector(length = length(df$fastq_files))
+    print(paste0("Generated a vector to hold your sigstrings that's ", 
+      length(df$fastq_files)," spaces long!"))
     sigstrings<-bajalign_sigs(adapters, sequences = df$fastq_files,
        null_distance = null_distance, nthreads_sigstrings) 
+    print("Done with sigstringing!")
     invisible(bajbatch(null_distance = null_distance, 
       read_layout = read_layout, sigstrings = sigstrings))
+    print("Done with bajbatching!")
     df_new<-baj_extract(sigstrings = sigstrings, whitelist_df = whitelist, 
       df = df, verbose = FALSE, barcorrect = TRUE, nthreads = nthreads_sigstract)
-    barcodes<-df_new$barcode %>% barcodes_to_bits_output(.)
+    
+    barcodes<-df_new$barcode %>% barcodes_to_bits(.)
+    df_true<-df_new$barcode %>%
+      barcodes_to_bits %>% 
+      {df_new[which(.%in%whitelist$whitelist_bcs),]}
+    
+    df_true$id<-DescTools::StrExtractBetween(x = df_true$sig_id, left = "^", right = "\\*")
+    df_true<-df_true %>% tidytable::unite("id", c("id", "umi", "barcode"), sep = "_", remove = FALSE) %>% 
+      .[,c("id","filtered_read","filtered_qc")] %>% 
+      data.table::setnames(c("id","seq","qual"))
+    
+    append_fastq<-file.exists(paste0(output_path, "/filtered_fastqs.txt.gz"))
+    fastqa_writer(df = df_true, fn = paste0(output_path, "/filtered_fastqs.txt.gz"), type = "fq", append = append_fastq)
+    
     append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
     write(barcodes, file = paste0(output_path,"/all_barcodes.txt"), 
       append = append_barcode)
     append_sigstrings<-file.exists(paste0(output_path, "sigsummary.txt"))
     write(sigstrings, file = paste0(output_path, "/sigsummary.txt"), 
       append = append_sigstrings)
+    print("Done with this chunk!")
   })
 }

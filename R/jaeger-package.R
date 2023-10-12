@@ -1,5 +1,6 @@
 ## usethis namespace: start
 #' @importFrom magrittr %>%
+#' @importFrom pbapply pblapply
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib jaeger, .registration = TRUE
 ## usethis namespace: end
