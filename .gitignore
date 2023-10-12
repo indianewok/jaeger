@@ -2,3 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+<<<<<<< HEAD
+=======
+src/*.o
+src/*.so
+src/*.dll
+>>>>>>> f2d750b (Bajranger V1.0.0: Jaeger)

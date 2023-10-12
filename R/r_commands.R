@@ -1,0 +1,331 @@
+#' @importFrom data.table fread setkey := .SD copy
+#' @importFrom magrittr %>%
+#' @importFrom stringr str_length str_split
+#' @importFrom stats sd
+#' @importFrom utils head
+#' @importFrom tidytable filter group_by summarise pull as_tidytable
+#' @importFrom glue glue
+#' @importFrom tools file_ext file_path_sans_ext
+#' @export
+stream_fastqas<-function(fn, type, seqkit_path = NULL, start, stop,...){
+  ext<-tools::file_ext(fn)
+  if (ext == "gz"){
+    cat_cmd<-"zcat"
+  }
+  else{
+    cat_cmd<-"cat"
+  }
+  if(type == "fq"){
+    res<-fread(cmd = glue::glue("{seqkit_path} range -r {start}:{stop} {fn} | paste - - - - | cut -f1,2,4"), 
+      col.names = c("id", "fastq_files","qc"), sep = "\t", quote = "", header = FALSE, ...)
+    res<-res[,c(1,3,2)]
+    res$id<-str_split(res$id, pattern = " ") %>% sapply(., function(x){x[1]}, USE.NAMES = FALSE)
+    return(res)
+  }
+  if(type == "fa"){
+    res<-fread(cmd = glue::glue("{seqkit_path} range -r {start}:{stop} | paste - - | cut -f1,2"),
+      quote ="", header = FALSE,
+      col.names = c("id", "seq"), sep = "\t", ...)
+    return(res)
+  }
+}
+#' @export
+whitelist_importer<-function(whitelist_path, save = NULL, convert = FALSE){
+  print("Importing a little bit of sample data...")
+  whitelist<-data.table::fread(input = whitelist_path, header = FALSE, data.table = TRUE, nrows = 10, nThread = 1,
+    col.names = "whitelist_bcs")
+  if(class(whitelist$whitelist_bcs) == "character"){
+    print("Character type detected! Importing the whitelist.")
+    whitelist<-data.table::fread(input = whitelist_path, header = FALSE, data.table = TRUE, nThread = 1, col.names = "whitelist_bcs")
+    if(convert != FALSE){
+      print("Converting the whitelist into a more efficient format!")
+      whitelist$whitelist_bcs<-barcodes_to_bits(whitelist$whitelist_bcs)
+    }
+    whitelist<-setkey(whitelist, "whitelist_bcs")
+    gc()
+    if(!is.null(save)){
+      if(save == TRUE){
+        new_path<-paste0(dirname(whitelist_path),"/",file_path_sans_ext(whitelist_path)
+          %>% basename(.),
+          "_bitlist.csv.gz")
+        print(paste0("Now saving the integer whitelist to ",new_path,"!"))
+        data.table::fwrite(x = whitelist, file = new_path, compress = "auto", nThread = 1, showProgress = TRUE, col.names = FALSE)
+        gc()
+      }
+    }
+    return(whitelist)
+  }
+  else{
+    if(class(whitelist$whitelist_bcs) == "integer"){
+      print("Integer64-type whitelist detected! Now importing...")
+      whitelist<-data.table::fread(input = whitelist_path, header = FALSE, data.table = TRUE, nThread = 1,
+        col.names = "whitelist_bcs", key = "whitelist_bcs", integer64 = "integer64")
+      gc()
+      return(whitelist)
+    }
+  }
+}
+#' @export
+prepare_to_anger<-function(read_layout_form, external_path_form, create_output_dir = TRUE,
+   data_table_nthreads = 1, seqkit_stats = TRUE, ...){
+  {
+    print("Importing read layout and figuring out its order!")
+    tidytable::setDTthreads(threads = 1)
+    read_layout<-data.table::fread(file = read_layout_form, header = TRUE, fill = TRUE, na.strings = "", skip = 1)
+    read_layout$expected_length[which(!is.na(read_layout$seq))]<-stringr::str_length(read_layout$seq[which(!is.na(read_layout$seq))])
+    if(any(read_layout$type %in% "poly_a" | read_layout$type %in% "poly_t")){
+      if(("poly_a" %in% read_layout$type) == TRUE){
+        read_layout$seq[which(read_layout$type %in% "poly_a")]<-"A{12,}+"
+      }
+      else{
+        read_layout$seq[which(read_layout$type %in% "poly_t")]<-"T{12,}+"
+      }
+    }
+    read_layout$order<-seq(1:nrow(read_layout))
+    read_layout$direction<-"forward"
+    barcode_position<-read_layout[order == min(order[type == "barcode"])]$order
+    adapters_near_barcode<-read_layout[type == "adapter" & (order - barcode_position) <= 1]
+    if(nrow(adapters_near_barcode) > 0){
+      flanking_adapter_id<-adapters_near_barcode[order(-expected_length), head(.SD, 1)]$id
+      read_layout[id == flanking_adapter_id, type := "flanking_adapter"]
+    }
+    
+    reverses_table<-copy(read_layout) %>%
+      .[, seq := ifelse(type == "poly_t", "A{12,}+", ifelse(type == "poly_a", "T{12,}+", sapply(seq, revcompR)))] %>% 
+      .[, id := ifelse(type %in% c("poly_a", "poly_t"), ifelse(type == "poly_a", "poly_t", "poly_a"),paste0("rc_", id))] %>% 
+      .[, type := ifelse(type == "poly_a", "poly_t", ifelse(type == "poly_t", "poly_a", type))] %>%
+      .[, direction := "reverse"]
+    
+    read_layout<-rbind(read_layout, reverses_table) #list2env this one
+    read_layout$order<-seq(1:nrow(read_layout))
+    #adapters<-read_layout$seq[grep(pattern = "adapter", x = read_layout$type)]
+    #names(adapters)<-read_layout$id[grep(pattern = "adapter", x = read_layout$type)] #list2env this one
+    adapters<-read_layout$seq[-which(is.na(read_layout$seq))]
+    names(adapters)<-read_layout$id[-which(is.na(read_layout$seq))]
+  }#preparing read layout and whatnot
+  {
+    print("Checking executable paths!")
+    path_layout<-data.table::fread(file = external_path_form, header = TRUE, fill = TRUE, na.strings = "", skip = 1,
+       key = "path_type", data.table = TRUE)
+    if(dir.exists(path_layout[path_type == "output_dir", actual_path]) == FALSE & create_output_dir == TRUE){
+      dir.create(path = path_layout[path_type == "output_dir", actual_path])
+    }
+    whitelist<-whitelist_importer(whitelist_path = path_layout[path_type == "whitelist", actual_path], ...)
+  }#preparing external paths for input
+  return(list2env(
+    x = list(read_layout = read_layout, 
+      path_layout = path_layout, 
+      adapters = adapters, 
+      whitelist = whitelist), envir = .GlobalEnv))
+}
+#' @export
+stat_collector<-function(df, read_layout, mode = NULL){
+  forward_adapters<-read_layout[type %in% c("adapter", "flanking_adapter") & direction == "forward", id]
+  reverse_adapters<-read_layout[type %in% c("adapter", "flanking_adapter") & direction == "reverse", id]
+  df<-as_tidytable(df)
+  forward_zero_ids<-df %>%
+    tidytable::filter(query_id %in% forward_adapters) %>%
+    tidytable::group_by(id) %>%
+    tidytable::filter(all(best_edit_distance == 0)) %>%
+    tidytable::pull(id)
+  reverse_zero_ids<-df %>% 
+    tidytable::filter(query_id %in% reverse_adapters) %>%
+    tidytable::group_by(id) %>%
+    tidytable::filter(all(best_edit_distance == 0)) %>%
+    tidytable::pull(id)
+  if(mode == "stats"){
+    stats_reverse<-df %>%
+      tidytable::filter(id %in% forward_zero_ids, query_id %in% reverse_adapters) %>%
+      tidytable::group_by(query_id) %>%
+      tidytable::summarise(
+        null_distance = mean(best_edit_distance), 
+        sd_null = sd(best_edit_distance))
+    stats_forward<-df %>%
+      tidytable::filter(id %in% reverse_zero_ids, query_id %in% forward_adapters) %>%
+      tidytable::group_by(query_id) %>%
+      tidytable::summarise(
+        null_distance = mean(best_edit_distance), 
+        sd_null = sd(best_edit_distance))
+    null_distance<-rbind(stats_forward, stats_reverse)
+    return(null_distance)
+  }
+  if(mode == "graphics"){
+    stats_reverse<-df %>%
+      tidytable::filter(id %in% forward_zero_ids, query_id %in% reverse_adapters) %>%
+      tidytable::group_by(query_id)
+    stats_forward<-df %>%
+      tidytable::filter(id %in% reverse_zero_ids, query_id %in% forward_adapters) %>%
+      tidytable::group_by(query_id)
+    total_stats<-data.table::rbindlist(list(stats_forward, stats_reverse))
+    return(total_stats)
+  }
+}
+#' @export
+fastqa_writer<-function(df,fn,type,append){
+  if(type == "fq"){
+    fq_list<-df %>%
+      dplyr::mutate(dummy = "+") %>%
+      dplyr::select(id, seq, dummy, qual) %>%
+      as.matrix() %>%
+      t() %>%
+      as.character() %>%
+      as_tibble()
+    data.table::fwrite(fq_list, file = fn, compress = "auto", col.names = FALSE, quote = FALSE, append = append)
+  }
+  if(type == "fa"){
+    if(any(grepl(">", df$id)) == FALSE){
+      df$id<-paste0(">",df$id)
+      fa_list<-df %>%
+        dplyr::select(id, seq) %>%
+        as.matrix() %>%
+        t() %>%
+        as.character() %>%
+        as_tibble()
+      data.table::fwrite(fa_list, file = fn, compress = "auto", col.names = FALSE, quote = FALSE, append = append)
+    }
+    fa_list<-df %>%
+      dplyr::select(id, seq) %>%
+      as.matrix() %>%
+      t() %>%
+      as.character() %>%
+      as_tibble()
+    data.table::fwrite(fa_list, file = fn, compress = "auto", col.names = FALSE, quote = FALSE, append = append)
+  }
+}
+#' @export
+read_fastqas<-function(fn,type, full_id = FALSE, ...){
+  ext<-tools::file_ext(fn)
+  if (ext == "gz"){
+    cat_cmd<-"zcat"
+  }
+  else{
+    cat_cmd<-"cat"
+  }
+  if(type == "fq"){
+    res<-fread(cmd = glue::glue("{cat_cmd} {fn} | paste - - - - | cut -f1,2,4"), col.names = c("id", "fastq_files","qc"),
+       sep = "\t", header = FALSE, quote = "", ...)
+    res<-res[,c(1,3,2)]
+    if(full_id == TRUE){
+      res$full_id<-res$id
+      res$id<-str_split(res$id, pattern = " ") %>% sapply(., function(x){x[1]}, USE.NAMES = FALSE)
+      return(res)
+    } else {
+      res$id<-str_split(res$id, pattern = " ") %>% sapply(., function(x){x[1]}, USE.NAMES = FALSE)
+      return(res)
+    }
+  }
+  if(type == "fa"){
+    res<-fread(cmd = glue::glue("{cat_cmd} {fn} | paste - - | cut -f1,2"), col.names = c("id", "seq"), sep = "\t", ...)
+    return(res)
+  }
+}
+#' @export
+bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
+   nthreads_sigstrings = 1, nthreads_sigstract = 1, test_return_stage = NULL){
+  prepare_to_anger(read_layout_form = read_layout_form, 
+    external_path_form = path_layout_form)
+  input_path<-path_layout["file","actual_path"]
+  output_path<-path_layout["output_dir","actual_path"]
+  print(paste0("The files are coming in from ", input_path, 
+    " and the files are going to be written to ", output_path))
+  if(test_mode == TRUE){
+    print("Testing that this actually works!")
+    if(dir.exists(input_path[[1]])){
+      print("Input path is a directory!")
+      gz_files<-list.files(path = input_path[[1]], pattern = ".gz", full.names = TRUE)
+      file_chunks<-split(gz_files, ceiling(seq_along(gz_files) / 50))
+      lapply(seq_along(file_chunks), function(i){
+        print("Testing to find all file chunks...")
+        if(file.exists(file_chunks[[i]][1])){
+          print(paste0("Chunk ",i," found!"))
+        }
+      })
+      print("Now pulling in the first big chunk...")
+      df<-lapply(X=file_chunks[[1]][1:20],FUN = function(X){read_fastqas(fn =X, 
+        type = "fq")}) %>% data.table::rbindlist(.)
+    } else {
+      if(file.exists(input_path[[1]])){
+        print("Input path is a single fastq file!")
+        df<-read_fastqas(fn = input_path, type = "fq", full_id = TRUE)
+      }
+    }
+    print("Now calculating misalignment distributions with first 100K sequences!")
+    if(test_return_stage == "stats"){
+      print("Returning stats mode! Generating  dataframe (1/3)...")
+      total_nd<-bajalign_stats(adapters[-grep("poly", x = names(adapters))], 
+        sequences = df$fastq_files[1:100000],
+        nthreads= 1)
+      print("Returning stats mode! Generating null distances (2/3)...")
+      null_distances<-bajalign_stats(adapters[-grep("poly", x = names(adapters))], 
+        sequences = df$fastq_files[1:100000],
+        nthreads= 1) %>% jaeger::stat_collector(., read_layout, mode = "stats")
+      print("Returning stats mode! Generating graphable df (3/3)...")
+      total_stats<-bajalign_stats(adapters[-grep("poly", x = names(adapters))], 
+        sequences = df$fastq_files[1:100000],
+        nthreads= 1) %>% jaeger::stat_collector(., read_layout, mode = "graphics")
+      return(list2env(x = list(total_nd = total_nd, null_distances = null_distances, total_stats = total_stats)))
+    }
+    null_distance<-bajalign_stats(adapters[-grep("poly", x = names(adapters))], 
+      sequences = df$fastq_files[1:100000],
+      nthreads= 1) %>% jaeger::stat_collector(., read_layout, mode = "stats")
+    print(null_distance)
+    if(test_return_stage == "import"){
+      return(list2env(x = list(df = df, null_distance = null_distance),envir = .GlobalEnv))
+    }
+    print("Now giving all of the alignment code a test run...")
+    print("Filtering the df for any sequences shorter than 150 bp...")
+    df<-df[which(str_length(df$fastq_files) >= 150),]
+    sigstrings<-vector(length = length(df$fastq_files))
+    print(paste0("Generated a vector to hold your sigstrings that's ", 
+      length(df$fastq_files)," spaces long!"))
+    sigstrings<-bajalign_sigs(adapters, sequences = df$fastq_files,
+       null_distance = null_distance, nthreads = nthreads_sigstrings)
+    print("Done with sigstringing!")
+    print(sigstrings[1:5])
+    if(test_return_stage == "sigstrings"){
+      return(list2env(list(df = df, sigstrings = sigstrings)),envir = .GlobalEnv)
+    }
+    invisible(bajbatch(null_distance = null_distance, read_layout = read_layout, 
+      sigstrings = sigstrings))
+    print("Done with bajbatching!")
+    print(sigstrings[1:5])
+    if(test_return_stage == "bajbatch"){
+      return(list2env(list(df = df, sigstrings = sigstrings)),envir = .GlobalEnv)
+    }
+    print("Now doing baj_extract!")
+    df_new<-baj_extract(sigstrings = sigstrings, whitelist_df = whitelist,
+       df = df, verbose = FALSE, barcorrect = TRUE, nthreads = nthreads_sigstract)
+    print("Done with extraction!")
+    if(test_return_stage == "baj_extract"){
+      return(list2env(x = list(df = df, df_new = df_new, sigstrings = sigstrings),envir = .GlobalEnv))
+    }
+  }
+  print("Calculating misalignment distributions with first 100K sequences!")
+  df<-lapply(X=file_chunks[[1]][1:20],
+    FUN = function(X){read_fastqas(fn =X, type = "fq")}) %>% data.table::rbindlist(.)
+  null_distance<-bajalign_stats(adapters[-grep("poly", x = names(adapters))], 
+    sequences = df$fastq_files[1:100000],
+    nthreads= 1) %>% stat_collector(., read_layout, mode = "stats")
+  print("Misalignment Thresholds as follows:")
+  print(null_distance)
+  write.csv(null_distance, file = paste0(output_path[[1]],"/misalignment_distances.csv"))
+  lapply(seq_along(file_chunks), function(i){
+    print(paste0("now on chunk ", i, " of processing!"))
+    df<-lapply(X=file_chunks[[i]],FUN = function(X){bajranger::read_fastqas(fn =X, 
+      type = "fq")}) %>% rbindlist(.)
+    sigstrings<-vector(length = length(df$fastq_files))
+    sigstrings<-bajalign_sigs(adapters, sequences = df$fastq_files,
+       null_distance = null_distance, nthreads_sigstrings) 
+    invisible(bajbatch(null_distance = null_distance, 
+      read_layout = read_layout, sigstrings = sigstrings))
+    df_new<-baj_extract(sigstrings = sigstrings, whitelist_df = whitelist, 
+      df = df, verbose = FALSE, barcorrect = TRUE, nthreads = nthreads_sigstract)
+    barcodes<-df_new$barcode %>% barcodes_to_bits_output(.)
+    append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
+    write(barcodes, file = paste0(output_path,"/all_barcodes.txt"), 
+      append = append_barcode)
+    append_sigstrings<-file.exists(paste0(output_path, "sigsummary.txt"))
+    write(sigstrings, file = paste0(output_path, "/sigsummary.txt"), 
+      append = append_sigstrings)
+  })
+}
