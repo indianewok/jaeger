@@ -1,53 +1,14 @@
-<<<<<<< HEAD
-Package: bajranger
+Package: jaeger
 Type: Package
 Title: Demultiplexing, Fixing, & Otherwise Futzing With Gnarly Sequencing Data
-Version: 0.0.1
 Author: CMV
 Maintainer: CMV <chinmay.m.vaidya.GR@dartmouth.edu>
 Description: I built a bunch of tools to basically make demultiplexing your data and tried to put it all in one place. Think of this package as the diligent monkey's Shakespeare.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
-Imports: 
-    bit64,
-    data.table,
-    DescTools,
-    dplyr,
-    edlibR,
-    glue,
-    magrittr,
-    pafr,
-    parallel,
-    pbapply,
-    pbmcapply,
-    processx,
-    progress,
-    pryr,
-    purrr,
-    R.utils,
-    Rcpp,
-    stats,
-    stringdist,
-    stringi,
-    stringr,
-    tgutil,
-    tibble,
-    tidytable,
-    tools,
-    trqwe
-RoxygenNote: 7.2.2
-=======
-Package: jaeger
-Type: Package
-Title: What the Package Does in One 'Title Case' Line
-Encoding: UTF-8
 Version: 1.0
 Date: 2023-10-09
-Author: Your Name
-Maintainer: Your Name <your@email.com>
-Description: One paragraph description of what the package does as one or more full sentences.
-License: GPL (>= 2)
 Imports: 
     data.table,
     dplyr,
@@ -58,7 +19,3 @@ Imports:
     tidytable
 LinkingTo: Rcpp
 RoxygenNote: 7.2.2
-Suggests: 
-    testthat (>= 3.0.0)
-Config/testthat/edition: 3
->>>>>>> f2d750b (Bajranger V1.0.0: Jaeger)
