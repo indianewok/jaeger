@@ -3,7 +3,7 @@ UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
 # macOS (Darwin) settings for Clang
 PKG_CXXFLAGS = -Xpreprocessor -fopenmp
-PKG_LIBS = -lomp
+PKG_LIBS= -fopenmp -lgomp 
 else
 # Linux settings for GCC
 PKG_CXXFLAGS = -fopenmp
