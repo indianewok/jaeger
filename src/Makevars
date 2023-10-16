@@ -1,5 +1,6 @@
 PKG_CPPFLAGS = -I../inst/include
 ifeq ($(OS_TYPE),apple)
+echo "Checking for OpenMP support..."
   PKG_CFLAGS = -Xclang -fopenmp
   PKG_LIBS = -lomp
 else
