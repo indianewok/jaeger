@@ -1,0 +1,37 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# jaeger
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of jaeger is to ...
+
+## Installation
+
+You can install the development version of jaeger from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("indianewok/jaeger")
+```
+### For macOS users
+If you encounter issues related to OpenMP, please add the following lines to your `.Makevars` file:
+
+```text
+LDFLAGS += -L/opt/homebrew/opt/libomp/lib -lomp
+CPPFLAGS += -I/opt/homebrew/opt/libomp/include -Xclang -fopenmp
+```

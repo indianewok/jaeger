@@ -518,15 +518,14 @@ Rcpp::DataFrame baj_extract(std::vector<std::string>& sigstrings,
               }
             } else {
         if (best_matches.size() > 1) {
-            // nwl_ids[i] += "{jaccard_multi_" + nwl_barcodes[i] + "_" + std::to_string(best_matches.size()) + ":jac_" + 
-            //   std::to_string(min_jaccard_distance) + ":ham_" + std::to_string(min_hamming_results.size()) + "}";
-            //   std::string concatenated_best_matches = "";
-            //     for (const auto& match : best_matches) {
-            //       concatenated_best_matches += match + "|";
-            //     }
-                  //concatenated_best_matches.pop_back();  // Remove the trailing "|"
-                  //nwl_barcodes[i] = concatenated_best_matches;
-              continue;
+            nwl_ids[i] += "{jaccard_multi_" + nwl_barcodes[i] + "_" + std::to_string(best_matches.size()) + ":jac_" +
+              std::to_string(min_jaccard_distance) + ":ham_" + std::to_string(min_hamming_results.size()) + "}";
+              std::string concatenated_best_matches = "";
+                for (const auto& match : best_matches) {
+                  concatenated_best_matches += match + "|";
+                }
+            concatenated_best_matches.pop_back();  // Remove the trailing "|"
+            nwl_barcodes[i] = concatenated_best_matches;
                 }
               }
             }

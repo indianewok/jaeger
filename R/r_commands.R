@@ -283,14 +283,14 @@ bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
     print("Done with sigstringing!")
     print(sigstrings[1:5])
     if(test_return_stage == "sigstrings"){
-      return(list2env(list(df = df, sigstrings = sigstrings)),envir = .GlobalEnv)
+      return(list2env(x = list(df = df, sigstrings = sigstrings),envir = .GlobalEnv))
     }
     invisible(bajbatch(null_distance = null_distance, read_layout = read_layout, 
       sigstrings = sigstrings))
     print("Done with bajbatching!")
     print(sigstrings[1:5])
     if(test_return_stage == "bajbatch"){
-      return(list2env(list(df = df, sigstrings = sigstrings)),envir = .GlobalEnv)
+      return(list2env(x = list(df = df, sigstrings = sigstrings),envir = .GlobalEnv))
     }
     print("Now doing baj_extract!")
     df_new<-baj_extract(sigstrings = sigstrings, whitelist_df = whitelist,

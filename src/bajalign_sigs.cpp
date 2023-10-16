@@ -1677,7 +1677,6 @@ Rcpp::DataFrame bajalign_stats(Rcpp::CharacterVector adapters, std::vector<std::
 #pragma omp parallel for
     for (int j = 0; j < queries.size(); ++j) {
       const auto& query = queries[j];
-      int query_counter = j + 1;  // Local query_counter, initialized to the loop index + 1
       EdlibAlignConfig config = edlibNewAlignConfig(-1, EDLIB_MODE_HW, EDLIB_TASK_LOC, NULL, 0);
       std::set<UniqueAlignment> uniqueAlignments;
       char* cquery = const_cast<char*>(query.c_str());
