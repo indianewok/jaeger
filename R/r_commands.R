@@ -319,6 +319,17 @@ bajrun<-function(path_layout_form, read_layout_form,
       })
     }
   }
+  if(dir.exists(input_path[[1]])){
+    print("Input path is a directory!")
+    gz_files<-list.files(path = input_path[[1]], pattern = ".gz", full.names = TRUE)
+    file_chunks<-split(gz_files, ceiling(seq_along(gz_files) / 50))
+    lapply(seq_along(file_chunks), function(i){
+      print("Testing to find all file chunks...")
+      if(file.exists(file_chunks[[i]][1])){
+        print(paste0("Chunk ",i," found!"))
+      }
+    })
+  }
   df<-lapply(X=file_chunks[[1]][1:20],
     FUN = function(X){read_fastqas(fn =X, type = "fq")}) %>% 
     data.table::rbindlist(.)
