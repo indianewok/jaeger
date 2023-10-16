@@ -169,7 +169,7 @@ fastqa_writer<-function(df,fn,type,append){
       as.matrix() %>%
       t() %>%
       as.character() %>%
-      as_tibble()
+      tibble::as_tibble()
     data.table::fwrite(fq_list, file = fn, compress = "auto", col.names = FALSE, quote = FALSE, append = append)
   }
   if(type == "fa"){
@@ -180,7 +180,7 @@ fastqa_writer<-function(df,fn,type,append){
         as.matrix() %>%
         t() %>%
         as.character() %>%
-        as_tibble()
+        tibble::as_tibble()
       data.table::fwrite(fa_list, file = fn, compress = "auto", col.names = FALSE, quote = FALSE, append = append)
     }
     fa_list<-df %>%
@@ -188,7 +188,7 @@ fastqa_writer<-function(df,fn,type,append){
       as.matrix() %>%
       t() %>%
       as.character() %>%
-      as_tibble()
+      tibble::as_tibble()
     data.table::fwrite(fa_list, file = fn, compress = "auto", col.names = FALSE, quote = FALSE, append = append)
   }
 }
@@ -356,7 +356,7 @@ bajrun<-function(path_layout_form, read_layout_form,
     df_new<-baj_extract(sigstrings = sigstrings, whitelist_df = whitelist, 
       df = df, verbose = FALSE, barcorrect = TRUE,
        nthreads = nthreads_sigstract, jaccard_on = FALSE)
-
+    print("Done with baj_extracting!")
     barcodes<-df_new$barcode %>% barcodes_to_bits(.)
     
     if(external_sr_bc == TRUE){
