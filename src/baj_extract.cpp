@@ -177,7 +177,7 @@ std::vector<int> find_mismatch_positions(const std::string& original, const std:
 
 std::pair<std::vector<std::string>, double> best_matches_jaccard_distance_qgram(
     const std::string& original,
-  const std::vector<std::string>& candidates, int q) {
+    const std::vector<std::string>& candidates, int q) {
   double min_jaccard_distance = 1.0;
   std::vector<std::string> best_matches;
   for (const auto& candidate : candidates) {
@@ -205,6 +205,32 @@ std::pair<std::vector<std::string>, double> best_matches_jaccard_distance_qgram(
     }
   }
   return std::make_pair(best_matches, min_jaccard_distance);
+}
+
+// Helper function to generate a secondary whitelist based on frequency
+std::vector<int64_t> generate_secondary_whitelist(std::unordered_map<int64_t, int>& frequency_table, int top_n) {
+  std::vector<std::pair<int64_t, int>> frequency_pairs(frequency_table.begin(), frequency_table.end());
+  std::sort(frequency_pairs.begin(), frequency_pairs.end(), [](const auto& a, const auto& b) {
+    return a.second > b.second;
+  });
+  std::vector<int64_t> secondary_whitelist;
+  for (int i = 0; i < std::min(top_n, static_cast<int>(frequency_pairs.size())); ++i) {
+    secondary_whitelist.push_back(frequency_pairs[i].first);
+  }
+  return secondary_whitelist;
+}
+
+// Helper function to find the most frequent barcode from a set using the frequency table
+int64_t find_most_frequent(std::set<int64_t>& candidates, std::unordered_map<int64_t, int>& frequency_table) {
+  int max_frequency = -1;
+  int64_t selected_candidate = -1;
+  for (const auto& candidate : candidates) {
+    if (frequency_table[candidate] > max_frequency) {
+      max_frequency = frequency_table[candidate];
+      selected_candidate = candidate;
+    }
+  }
+  return selected_candidate;
 }
 
 // [[Rcpp::export]]
@@ -451,8 +477,15 @@ Rcpp::DataFrame baj_extract(std::vector<std::string>& sigstrings,
   omp_set_num_threads(nthreads);
   if (barcorrect){
     std::vector<int64_t> nwl_intcodes = barcodes_to_bits_cpp(nwl_barcodes);
+    std::unordered_map<int64_t, int> frequency_table;
+    std::vector<int64_t> wl_bit_barcodes = barcodes_to_bits_cpp(wl_barcodes);
+    for (const auto& barcode : wl_bit_barcodes) {
+      frequency_table[barcode]++;
+    }
+    std::vector<int64_t> secondary_whitelist_vec = generate_secondary_whitelist(frequency_table, 10000);  // Assuming top 20k
+    std::unordered_set<int64_t> secondary_whitelist(secondary_whitelist_vec.begin(), secondary_whitelist_vec.end());
     // OpenMP parallelization starts here
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 0; i < nwl_barcodes.size(); ++i) {
       int64_t original_bit_barcode = nwl_intcodes[i];
       int min_hamming_distance = max_mutations;
@@ -461,84 +494,80 @@ Rcpp::DataFrame baj_extract(std::vector<std::string>& sigstrings,
       recursive_flip_bits_cpp(original_bit_barcode, original_bit_barcode, 0, max_iterations, 2 * barcode_length, whitelist_set, 
         min_hamming_distance, min_hamming_results);
       // If a single barcode is found with the minimum Hamming distance, correct the original
-      if(verbose){
-          #pragma omp critical
-                  {
-                    Rcpp::Rcout << "Original barcode: " << nwl_barcodes[i] << " Number of hamming-distance mapped barcodes found in whitelist: " << min_hamming_results.size() << std::endl;
-                      if(min_hamming_results.size() <= 5){
-                        std::vector<int64_t> min_hamming_results_vec(min_hamming_results.begin(), min_hamming_results.end());
-                        std::vector<std::string> results = bits_to_barcodes_cpp(min_hamming_results_vec);
-                        Rcpp::Rcout << "Generated barcodes: ";
-                            for (const auto& str : results){
-                                Rcpp::Rcout << str << ' ';
-                                }
-                          Rcpp::Rcout << std::endl;
-    // Iterate over each generated barcode to find mismatch positions
-                            for (const auto& generated_barcode : results){
-                               std::vector<int> mismatch_positions = find_mismatch_positions(nwl_barcodes[i], generated_barcode);
-                               Rcpp::Rcout << "Mismatch positions for " << generated_barcode << ": ";
-                                  for (const auto& pos : mismatch_positions){
-                                  Rcpp::Rcout << pos << ' ';
-                                 }
-                              Rcpp::Rcout << std::endl;
-                            }
-                        }
-                      }
-                }
       if (min_hamming_results.size() == 1) {
         int64_t corrected_bit_barcode = *min_hamming_results.begin();
         std::string corrected_barcode = bits_to_barcodes_cpp({corrected_bit_barcode})[0];
         nwl_ids[i] += "{orig_hamming_" + nwl_barcodes[i] + "_" + corrected_barcode + ":" + std::to_string(min_hamming_distance) + "}";
-          if(verbose){
-              #pragma omp critical
-              {
-                Rcpp::Rcout << "Hamming corrected barcode " << nwl_barcodes[i] << " to " << corrected_barcode << std::endl;
-              }
-            }
-          nwl_barcodes[i] = corrected_barcode;}
+        nwl_barcodes[i] = corrected_barcode;
+        }
       else {
+        if(min_hamming_results.size() > 1) {
+          std::vector<int> candidate_frequencies;
+          for (const auto& candidate : min_hamming_results) {
+            candidate_frequencies.push_back(frequency_table[candidate]);
+          }
+          auto max_frequency_iter = std::max_element(candidate_frequencies.begin(), candidate_frequencies.end());
+        if (std::count(candidate_frequencies.begin(), candidate_frequencies.end(), *max_frequency_iter) == 1) {
+            int index = std::distance(candidate_frequencies.begin(), max_frequency_iter);
+            auto min_hamming_results_it = min_hamming_results.begin();
+            std::advance(min_hamming_results_it, index);
+            int64_t selected_candidate = *min_hamming_results_it;
+            // Update nwl_barcodes[i] and nwl_ids[i] based on selected_candidate
+            std::string corrected_barcode = bits_to_barcodes_cpp({selected_candidate})[0];
+            nwl_ids[i] += "{orig_hamming_minilist_" + nwl_barcodes[i] + "_" + corrected_barcode + "}";
+            nwl_barcodes[i] = corrected_barcode;
+          }
+        else{
         if (jaccard_on) {
-        std::vector<int64_t> min_hamming_results_vec(min_hamming_results.begin(), min_hamming_results.end());
-        std::vector<std::string> candidate_barcodes = bits_to_barcodes_cpp(min_hamming_results_vec);
-        auto result = best_matches_jaccard_distance_qgram(nwl_barcodes[i], candidate_barcodes, 2);
-        std::vector<std::string> best_matches = result.first;
-        double min_jaccard_distance = result.second;
-        if (best_matches.size() == 1) {
-          nwl_ids[i] += "{orig_jaccard_" + nwl_barcodes[i] + "_" + best_matches[0] + ":" + std::to_string(min_jaccard_distance) + "}";
-          nwl_barcodes[i] = best_matches[0];
-          if (verbose) {
-              #pragma omp critical
-                  {
-                    Rcpp::Rcout << "Jaccard corrected barcode " << nwl_barcodes[i] << " to ";
-                        for (const auto& match : best_matches) {
-                        Rcpp::Rcout << match << ' ';
-                  }
-                Rcpp::Rcout << std::endl;
+            std::vector<int64_t> min_hamming_results_vec(min_hamming_results.begin(), min_hamming_results.end());
+            std::vector<std::string> candidate_barcodes = bits_to_barcodes_cpp(min_hamming_results_vec);
+            auto result = best_matches_jaccard_distance_qgram(nwl_barcodes[i], candidate_barcodes, 2);
+            std::vector<std::string> best_matches = result.first;
+            double min_jaccard_distance = result.second;
+            if (best_matches.size() == 1) {
+              nwl_ids[i] += "{orig_jaccard_" + nwl_barcodes[i] + "_" + best_matches[0] + ":" + std::to_string(min_jaccard_distance) + "}";
+              nwl_barcodes[i] = best_matches[0];
+            }else {
+              if (best_matches.size() > 1) {
+                std::set<int64_t> extended_hamming_results;
+                for (const auto& candidate : best_matches) {
+                  int64_t candidate_bit = barcodes_to_bits_cpp({candidate})[0];
+                  recursive_flip_bits_cpp(candidate_bit, candidate_bit, 0, max_iterations, 2 * barcode_length, secondary_whitelist, 
+                    min_hamming_distance, extended_hamming_results);
+                }
+                // Find the most frequent barcode among the extended Hamming results using the secondary whitelist
+                int64_t selected_candidate = find_most_frequent(extended_hamming_results, frequency_table);
+                if (selected_candidate != -1) {
+                  std::string corrected_barcode = bits_to_barcodes_cpp({selected_candidate})[0];
+                  nwl_ids[i] += "{orig_extended_hamming_" + nwl_barcodes[i] + "_" + corrected_barcode + "}";
+                  nwl_barcodes[i] = corrected_barcode;
                 }
               }
-            } else {
-        if (best_matches.size() > 1) {
-            nwl_ids[i] += "{jaccard_multi_" + nwl_barcodes[i] + "_" + std::to_string(best_matches.size()) + ":jac_" +
-              std::to_string(min_jaccard_distance) + ":ham_" + std::to_string(min_hamming_results.size()) + "}";
-              std::string concatenated_best_matches = "";
+              else {
+                // If there's still a tie, existing logic or other criteria can be used
+                nwl_ids[i] += "{jaccard_multi_minilist_" + nwl_barcodes[i] + "_" + std::to_string(best_matches.size()) + ":jac_" +
+                  std::to_string(min_jaccard_distance) + ":ham_" + std::to_string(min_hamming_results.size()) + "}";
+                std::string concatenated_best_matches = "";
                 for (const auto& match : best_matches) {
                   concatenated_best_matches += match + "|";
                 }
-            concatenated_best_matches.pop_back();  // Remove the trailing "|"
-            nwl_barcodes[i] = concatenated_best_matches;
+                concatenated_best_matches.pop_back();  // Remove the trailing "|"
+                nwl_barcodes[i] = concatenated_best_matches;
                 }
               }
             }
           }
+        }
       }
-      wl_barcodes.insert(wl_barcodes.end(), nwl_barcodes.begin(), nwl_barcodes.end());
-      wl_umis.insert(wl_umis.end(), nwl_umis.begin(), nwl_umis.end());
-      wl_reads.insert(wl_reads.end(), nwl_reads.begin(), nwl_reads.end());
-      wl_qcs.insert(wl_qcs.end(), nwl_qcs.begin(), nwl_qcs.end());
-      wl_ids.insert(wl_ids.end(), nwl_ids.begin(), nwl_ids.end());
-      wl_bcqcs.insert(wl_bcqcs.end(), nwl_bcqcs.begin(), nwl_bcqcs.end());
     }
-    return Rcpp::DataFrame::create(Rcpp::Named("sig_id") = wl_ids,
+    wl_barcodes.insert(wl_barcodes.end(), nwl_barcodes.begin(), nwl_barcodes.end());
+    wl_umis.insert(wl_umis.end(), nwl_umis.begin(), nwl_umis.end());
+    wl_reads.insert(wl_reads.end(), nwl_reads.begin(), nwl_reads.end());
+    wl_qcs.insert(wl_qcs.end(), nwl_qcs.begin(), nwl_qcs.end());
+    wl_ids.insert(wl_ids.end(), nwl_ids.begin(), nwl_ids.end());
+    wl_bcqcs.insert(wl_bcqcs.end(), nwl_bcqcs.begin(), nwl_bcqcs.end());
+  }
+  return Rcpp::DataFrame::create(Rcpp::Named("sig_id") = wl_ids,
     Rcpp::Named("barcode") = wl_barcodes,
     Rcpp::Named("barcode_qc") = wl_bcqcs,
     Rcpp::Named("umi") = wl_umis,
