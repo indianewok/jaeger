@@ -1,11 +1,3 @@
-UNAME := $(shell uname)
-
-ifeq ($(UNAME), Darwin)
-# macOS (Darwin) settings for Clang
-PKG_CXXFLAGS = -Xpreprocessor -fopenmp
-PKG_LIBS= -fopenmp -lgomp 
-else
-# Linux settings for GCC
-PKG_CXXFLAGS = -fopenmp
-PKG_LIBS = -fopenmp
-endif
+PKG_CFLAGS = $(SHLIB_OPENMP_CFLAGS)
+PKG_LIBS = $(SHLIB_OPENMP_CFLAGS)
+PKG_CPPFLAGS = -I../inst/include
