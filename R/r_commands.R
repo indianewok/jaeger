@@ -220,15 +220,20 @@ read_fastqas<-function(fn,type, full_id = FALSE, ...){
   }
 }
 #' @export
-bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
-   nthreads_sigstrings = 1, nthreads_sigstract = 1, test_return_stage = NULL){
+bajrun<-function(path_layout_form, read_layout_form, 
+  test_mode = FALSE, nthreads_sigstrings = 1, nthreads_sigstract = 1, 
+  test_return_stage = NULL, external_sr_bc = FALSE){
   prepare_to_anger(read_layout_form = read_layout_form, 
     external_path_form = path_layout_form)
   input_path<-path_layout["file","actual_path"]
   output_path<-path_layout["output_dir","actual_path"]
+  if(external_sr_bc == TRUE){
+    external_bc_path<-path_layout["external_sr_bc","actual_path"]
+    external_bcs<-readLines(external_bc_path[[1]])
+  }
   print(paste0("The files are coming in from ", input_path, 
     " and the files are going to be written to ", output_path))
-  if(test_mode == TRUE & test_return_stage != "chunked_fastqs"){
+  if(test_mode == TRUE && test_return_stage != "chunked_fastqs"){
     print("Testing that this actually works!")
     if(dir.exists(input_path[[1]])){
       print("Input path is a directory!")
@@ -338,12 +343,18 @@ bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
       read_layout = read_layout, sigstrings = sigstrings))
     print("Done with bajbatching!")
     df_new<-baj_extract(sigstrings = sigstrings, whitelist_df = whitelist, 
-      df = df, verbose = FALSE, barcorrect = TRUE, nthreads = nthreads_sigstract)
-    
+      df = df, verbose = FALSE, barcorrect = TRUE,
+       nthreads = nthreads_sigstract, jaccard_on = FALSE)
+
     barcodes<-df_new$barcode %>% barcodes_to_bits(.)
+    
+    if(external_sr_bc == TRUE){
+      df_true<-df_new[which(df_new$barcode %in% external_bcs),]
+    } else {
     df_true<-df_new$barcode %>%
       barcodes_to_bits %>% 
       {df_new[which(.%in%whitelist$whitelist_bcs),]}
+    }
     
     df_true$id<-DescTools::StrExtractBetween(x = df_true$sig_id, left = "^", right = "\\*")
     df_true<-df_true %>% tidytable::unite("id", c("id", "umi", "barcode"), sep = "_", remove = FALSE) %>% 
@@ -351,11 +362,13 @@ bajrun<-function(path_layout_form, read_layout_form, test_mode = FALSE,
       data.table::setnames(c("id","seq","qual"))
     
     append_fastq<-file.exists(paste0(output_path, "/filtered_fastqs.txt.gz"))
-    fastqa_writer(df = df_true, fn = paste0(output_path, "/filtered_fastqs.txt.gz"), type = "fq", append = append_fastq)
+    fastqa_writer(df = df_true, fn = paste0(output_path, "/filtered_fastqs.txt.gz"), 
+      type = "fq", append = append_fastq)
     
     append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
     write(barcodes, file = paste0(output_path,"/all_barcodes.txt"), 
       append = append_barcode)
+    
     append_sigstrings<-file.exists(paste0(output_path, "sigsummary.txt"))
     write(sigstrings, file = paste0(output_path, "/sigsummary.txt"), 
       append = append_sigstrings)

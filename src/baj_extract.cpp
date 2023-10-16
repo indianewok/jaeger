@@ -287,7 +287,8 @@ Rcpp::NumericVector barcodes_to_bits(Rcpp::StringVector barcodes) {
 }
 
 // [[Rcpp::export]]
-Rcpp::StringVector bits_to_barcodes(Rcpp::NumericVector input, int barcode_length = 16, bool verbose = false) {
+Rcpp::StringVector bits_to_barcodes(Rcpp::NumericVector input, int barcode_length = 16, 
+  bool verbose = false) {
   // Convert the NumericVector to std::vector<int64_t>
   std::vector<int64_t> cpp_bits = Rcpp::fromInteger64(input);
   int n = cpp_bits.size();
@@ -314,7 +315,8 @@ Rcpp::StringVector bits_to_barcodes(Rcpp::NumericVector input, int barcode_lengt
 }
 
 // [[Rcpp::export]]
-Rcpp::NumericVector mutate_and_check(Rcpp::NumericVector barcode, int max_mutations, Rcpp::DataFrame r_whitelist_df, int barcode_length = 16) {
+Rcpp::NumericVector mutate_and_check(Rcpp::NumericVector barcode, int max_mutations, 
+  Rcpp::DataFrame r_whitelist_df, int barcode_length = 16) {
   // Convert R integer64 barcode to int64_t using RcppInt64
   std::vector<int64_t> barcodes_vec = Rcpp::fromInteger64(barcode);
   int64_t int64_barcode = barcodes_vec[0];  // Assuming you're working with a single barcode
