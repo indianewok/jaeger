@@ -2,6 +2,7 @@
 #' @importFrom magrittr %>%
 #' @importFrom pbapply pblapply
 #' @importFrom Rcpp sourceCpp
+#' @importFrom tibble as_tibble
 #' @useDynLib jaeger, .registration = TRUE
 ## usethis namespace: end
 NULL
