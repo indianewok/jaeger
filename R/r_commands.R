@@ -222,7 +222,7 @@ read_fastqas<-function(fn,type, full_id = FALSE, ...){
 #' @export
 bajrun<-function(path_layout_form, read_layout_form, 
   test_mode = FALSE, nthreads_sigstrings = 1, nthreads_sigstract = 1, 
-  test_return_stage = NULL, external_sr_bc = FALSE){
+  test_return_stage = NULL, external_sr_bc = FALSE, chunk_divisor = 50){
   prepare_to_anger(read_layout_form = read_layout_form, 
     external_path_form = path_layout_form)
   input_path<-path_layout["file","actual_path"]
@@ -322,7 +322,7 @@ bajrun<-function(path_layout_form, read_layout_form,
   if(dir.exists(input_path[[1]])){
     print("Input path is a directory!")
     gz_files<-list.files(path = input_path[[1]], pattern = ".gz", full.names = TRUE)
-    file_chunks<-split(gz_files, ceiling(seq_along(gz_files) / 50))
+    file_chunks<-split(gz_files, ceiling(seq_along(gz_files) / chunk_divisor))
     lapply(seq_along(file_chunks), function(i){
       print("Testing to find all file chunks...")
       if(file.exists(file_chunks[[i]][1])){
@@ -361,6 +361,7 @@ bajrun<-function(path_layout_form, read_layout_form,
     
     if(external_sr_bc == TRUE){
       df_true<-df_new[which(df_new$barcode %in% external_bcs),]
+      print(paste0(nrow(df_true), " barcodes in the external list!"))
     } else {
     df_true<-df_new$barcode %>%
       barcodes_to_bits %>% 
@@ -377,12 +378,12 @@ bajrun<-function(path_layout_form, read_layout_form,
       type = "fq", append = append_fastq)
     
     append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
-    write(barcodes, file = paste0(output_path,"/all_barcodes.txt"), 
-      append = append_barcode)
+    data.table::fwrite(barcodes, file = paste0(output_path,"/all_barcodes.txt.gz"), 
+      append = append_barcode, compress = "auto")
     
     append_sigstrings<-file.exists(paste0(output_path, "sigsummary.txt"))
-    write(sigstrings, file = paste0(output_path, "/sigsummary.txt"), 
-      append = append_sigstrings)
+    write(sigstrings, file = paste0(output_path, "/sigsummary.txt.gz"), 
+      append = append_sigstrings, compress = "auto")
     print("Done with this chunk!")
   })
 }
