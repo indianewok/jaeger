@@ -378,11 +378,11 @@ bajrun<-function(path_layout_form, read_layout_form,
       type = "fq", append = append_fastq)
     
     append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
-    writeLines(barcodes, file = paste0(output_path,"/all_barcodes.txt"), 
+    write(x = barcodes, file = paste0(output_path,"/all_barcodes.txt"), 
       append = append_barcode)
     
     append_sigstrings<-file.exists(paste0(output_path, "sigsummary.txt"))
-    writeLines(sigstrings, file = paste0(output_path, "/sigsummary.txt"), 
+    write(x = sigstrings, file = paste0(output_path, "/sigsummary.txt"), 
       append = append_sigstrings)
     print("Done with this chunk!")
   })
