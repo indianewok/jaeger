@@ -357,7 +357,7 @@ bajrun<-function(path_layout_form, read_layout_form,
       df = df, verbose = FALSE, barcorrect = TRUE,
        nthreads = nthreads_sigstract, jaccard_on = FALSE)
     print("Done with baj_extracting!")
-    barcodes<-df_new$barcode %>% barcodes_to_bits(.)
+    barcodes<-df_new$barcode
     
     if(external_sr_bc == TRUE){
       df_true<-df_new[which(df_new$barcode %in% external_bcs),]
@@ -378,12 +378,12 @@ bajrun<-function(path_layout_form, read_layout_form,
       type = "fq", append = append_fastq)
     
     append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
-    data.table::fwrite(barcodes, file = paste0(output_path,"/all_barcodes.txt.gz"), 
-      append = append_barcode, compress = "auto")
+    writeLines(barcodes, file = paste0(output_path,"/all_barcodes.txt"), 
+      append = append_barcode)
     
     append_sigstrings<-file.exists(paste0(output_path, "sigsummary.txt"))
-    write(sigstrings, file = paste0(output_path, "/sigsummary.txt.gz"), 
-      append = append_sigstrings, compress = "auto")
+    writeLines(sigstrings, file = paste0(output_path, "/sigsummary.txt"), 
+      append = append_sigstrings)
     print("Done with this chunk!")
   })
 }
