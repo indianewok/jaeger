@@ -227,7 +227,8 @@ read_fastqas<-function(fn,type, full_id = FALSE, ...){
 #' @export
 bajrun<-function(path_layout_form, read_layout_form, 
   test_mode = FALSE, nthreads_sigstrings = 1, nthreads_sigstract = 1, 
-  test_return_stage = NULL, external_sr_bc = FALSE, chunk_divisor = 50){
+  test_return_stage = NULL, external_sr_bc = FALSE, chunk_divisor = 50, 
+  barcorrect = TRUE, jaccard_on = FALSE){
   prepare_to_anger(read_layout_form = read_layout_form, 
     external_path_form = path_layout_form)
   input_path<-path_layout["file","actual_path"]
@@ -359,11 +360,11 @@ bajrun<-function(path_layout_form, read_layout_form,
       read_layout = read_layout, sigstrings = sigstrings))
     print("Done with bajbatching!")
     df_new<-baj_extract(sigstrings = sigstrings, whitelist_df = whitelist, 
-      df = df, verbose = FALSE, barcorrect = TRUE,
-       nthreads = nthreads_sigstract, jaccard_on = FALSE)
+      df = df, verbose = FALSE, barcorrect = barcorrect,
+       nthreads = nthreads_sigstract, jaccard_on = jaccard_on)
     print("Done with baj_extracting!")
     barcodes<-df_new$barcode
-    
+    print(paste0(length(unique(barcodes)), " barcodes in total!"))
     if(external_sr_bc == TRUE){
       df_true<-df_new[which(df_new$barcode %in% external_bcs),]
       print(paste0(nrow(df_true), " barcodes in the external list!"))
@@ -378,8 +379,8 @@ bajrun<-function(path_layout_form, read_layout_form,
       .[,c("id","filtered_read","filtered_qc")] %>% 
       data.table::setnames(c("id","seq","qual"))
     
-    append_fastq<-file.exists(paste0(output_path, "/filtered_fastqs.txt.gz"))
-    fastqa_writer(df = df_true, fn = paste0(output_path, "/filtered_fastqs.txt.gz"), 
+    append_fastq<-file.exists(paste0(output_path, "/filtered_reads.fastq.gz"))
+    fastqa_writer(df = df_true, fn = paste0(output_path, "/filtered_reads.fastq.gz"), 
       type = "fq", append = append_fastq)
     
     append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
