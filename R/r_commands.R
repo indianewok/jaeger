@@ -374,8 +374,8 @@ bajrun<-function(path_layout_form, read_layout_form,
       .[,c("id","filtered_read","filtered_qc")] %>% 
       data.table::setnames(c("id","seq","qual"))
     
-    append_fastq<-file.exists(paste0(output_path, "/filtered_fastqs.txt.gz"))
-    fastqa_writer(df = df_true, fn = paste0(output_path, "/filtered_fastqs.txt.gz"), 
+    append_fastq<-file.exists(paste0(output_path, "/filtered_reads.fastq.gz"))
+    fastqa_writer(df = df_true, fn = paste0(output_path, "/filtered_reads.fastq.gz"), 
       type = "fq", append = append_fastq)
     
     append_barcode<-file.exists(paste0(output_path,"/all_barcodes.txt"))
