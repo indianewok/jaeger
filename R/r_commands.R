@@ -215,8 +215,13 @@ read_fastqas<-function(fn,type, full_id = FALSE, ...){
     }
   }
   if(type == "fa"){
-    res<-fread(cmd = glue::glue("{cat_cmd} {fn} | paste - - | cut -f1,2"), col.names = c("id", "seq"), sep = "\t", ...)
-    return(res)
+        awk_cmd <- 'awk \'/^>/{if (NR>1) printf("\\n"); printf("%s\\t",$0); next} {printf("%s",$0);} END {printf("\\n");}\''
+        if(ext == "gz"){
+            res<-fread(cmd = glue::glue("gunzip -c {fn} | {awk_cmd}"), col.names = c("id", "seq"), sep = "\t", ...)
+        } else {
+          res<-fread(cmd = glue::glue("{awk_cmd} {fn}"), col.names = c("id", "seq"), sep = "\t", ...)
+        }
+      return(res)
   }
 }
 #' @export

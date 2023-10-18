@@ -484,7 +484,7 @@ Rcpp::DataFrame baj_extract(std::vector<std::string>& sigstrings,
     for (const auto& barcode : wl_bit_barcodes) {
       frequency_table[barcode]++;
     }
-    std::vector<int64_t> secondary_whitelist_vec = generate_secondary_whitelist(frequency_table, 10000);  // Assuming top 20k
+    std::vector<int64_t> secondary_whitelist_vec = generate_secondary_whitelist(frequency_table, 5000);  // Assuming top 20k
     std::unordered_set<int64_t> secondary_whitelist(secondary_whitelist_vec.begin(), secondary_whitelist_vec.end());
     // OpenMP parallelization starts here
 #pragma omp parallel for
