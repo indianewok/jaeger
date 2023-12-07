@@ -161,7 +161,7 @@ stat_collector<-function(df, read_layout, mode = NULL){
   }
 }
 #' @export
-fastqa_writer<-function(df,fn,type,append){
+fastqa_writer<-function(df, fn, type, append = FALSE){
   if(type == "fq"){
     fq_list<-df %>%
       dplyr::mutate(dummy = "+") %>%
@@ -193,41 +193,57 @@ fastqa_writer<-function(df,fn,type,append){
   }
 }
 #' @export
-read_fastqas<-function(fn,type, full_id = FALSE, ...){
-  ext<-tools::file_ext(fn)
-  if (ext == "gz"){
-    cat_cmd<-"zcat"
-  }
-  else{
-    cat_cmd<-"cat"
-  }
-  if(type == "fq"){
-    res<-fread(cmd = glue::glue("{cat_cmd} {fn} | paste - - - - | cut -f1,2,4"), col.names = c("id", "fastq_files","qc"),
-       sep = "\t", header = FALSE, quote = "", ...)
-    res<-res[,c(1,3,2)]
-    if(full_id == TRUE){
-      res$full_id<-res$id
-      res$id<-str_split(res$id, pattern = " ") %>% sapply(., function(x){x[1]}, USE.NAMES = FALSE)
-      return(res)
-    } else {
-      res$id<-str_split(res$id, pattern = " ") %>% sapply(., function(x){x[1]}, USE.NAMES = FALSE)
+read_fastqas<-function(fn, type, full_id = FALSE, ...){
+  rfq_single<-function(fn, type, full_id = FALSE, ...){
+    ext<-tools::file_ext(fn)
+    if (ext == "gz"){
+      cat_cmd<-"zcat"
+    }
+    else{
+      cat_cmd<-"cat"
+    }
+    if(type == "fq"){
+      res<-fread(cmd = glue::glue("{cat_cmd} {fn} | paste - - - - | cut -f1,2,4"), col.names = c("id", "fastq_files","qc"),
+        sep = "\t", header = FALSE, quote = "", ...)
+      res<-res[,c(1,3,2)]
+      if(full_id == TRUE){
+        res$full_id<-res$id
+        res$id<-str_split(res$id, pattern = " ") %>% sapply(., function(x){x[1]}, USE.NAMES = FALSE)
+        return(res)
+      } else {
+        res$id<-str_split(res$id, pattern = " ") %>% sapply(., function(x){x[1]}, USE.NAMES = FALSE)
+        return(res)
+      }
+    }
+    if(type == "fa"){
+      awk_cmd <- 'awk \'/^>/{if (NR>1) printf("\\n"); printf("%s\\t",$0); next} {printf("%s",$0);} END {printf("\\n");}\''
+      if(ext == "gz"){
+        res<-fread(cmd = glue::glue("gunzip -c {fn} | {awk_cmd}"), col.names = c("id", "seq"), sep = "\t", ...)
+      } else {
+        res<-fread(cmd = glue::glue("{awk_cmd} {fn}"), col.names = c("id", "seq"), sep = "\t", ...)
+      }
       return(res)
     }
+    
   }
-  if(type == "fa"){
-        awk_cmd <- 'awk \'/^>/{if (NR>1) printf("\\n"); printf("%s\\t",$0); next} {printf("%s",$0);} END {printf("\\n");}\''
-        if(ext == "gz"){
-            res<-fread(cmd = glue::glue("gunzip -c {fn} | {awk_cmd}"), col.names = c("id", "seq"), sep = "\t", ...)
+    if(class(fn) == "list"){
+      out<-pbapply::pblapply(X = fn, FUN = function(X){
+        if(length(X) == 1){
+            return(rfq_single(fn = X, full_id = FALSE, type = type, ...))
         } else {
-          res<-fread(cmd = glue::glue("{awk_cmd} {fn}"), col.names = c("id", "seq"), sep = "\t", ...)
-        }
-      return(res)
-  }
+            return(NA)
+          }
+      })
+      return(out[-which(is.na(out))])
+    } else {
+      return(rfq_single(fn = fn, type = type, full_id = FALSE, ...))  
+    }
 }
 #' @export
 bajrun<-function(path_layout_form, read_layout_form, 
-  test_mode = FALSE, nthreads_sigstrings = 1, nthreads_sigstract = 1, 
-  test_return_stage = NULL, external_sr_bc = FALSE, chunk_divisor = 50, 
+  test_mode = FALSE, nthreads_sigstrings = 1,
+  nthreads_sigstract = 1, test_return_stage = NULL,
+  external_sr_bc = FALSE, chunk_divisor = 50, 
   barcorrect = TRUE, jaccard_on = FALSE){
   prepare_to_anger(read_layout_form = read_layout_form, 
     external_path_form = path_layout_form)
@@ -336,6 +352,7 @@ bajrun<-function(path_layout_form, read_layout_form,
       }
     })
   }
+  #gotta fix this part--harcoded minimum chunk divisor of 20, and I think it can actually go faster
   df<-lapply(X=file_chunks[[1]][1:20],
     FUN = function(X){read_fastqas(fn =X, type = "fq")}) %>% 
     data.table::rbindlist(.)
@@ -392,4 +409,35 @@ bajrun<-function(path_layout_form, read_layout_form,
       append = append_sigstrings)
     print("Done with this chunk!")
   })
+}
+#' @export
+read_paf<-function(path, ...){
+df<-data.table::fread(input = path, 
+  fill = TRUE, sep = NULL, strip.white = FALSE, header = FALSE )
+df<-df[[1]] %>% stringr::str_split(., pattern = "\t", simplify = TRUE) %>% as.data.table
+df[df == '']<-NA
+ids<-c("id","ql","qs","qe","qr","sn","sl","ss","se","mm","mt","mq")
+data.table::setnames(df, c(ids,
+  df[,ncol(df):ncol(df),] %>% {
+    which(!is.na(.))} %>% 
+    df[.,13:ncol(df),] %>% 
+    {substr(unlist(.), start = 1, stop = 2)} %>% 
+    unique))
+for (col in (length(ids) + 1):ncol(df)) {
+  tag_prefixes<-substr(df[[col]], start = 1, stop = 2)
+  expected_tag<-colnames(df)[col]
+  mismatch_indices<-which(tag_prefixes != expected_tag & !is.na(tag_prefixes))
+  if (length(mismatch_indices) > 0) {
+    # Shifting columns to the right for mismatched rows
+    df[mismatch_indices, (col + 1):ncol(df) := .SD, .SDcols = col:(ncol(df) - 1)]
+    df[mismatch_indices, (col) := NA]  # Set current column to NA for mismatched rows
+  }
+}
+for (col in names(df)) {
+  numeric_conversion <- suppressWarnings(as.numeric(df[[col]]))
+  if (!any(is.na(numeric_conversion)) || all(is.na(numeric_conversion) == is.na(df[[col]]))) {
+    df[[col]] <- numeric_conversion
+  }
+}
+return(df)
 }
